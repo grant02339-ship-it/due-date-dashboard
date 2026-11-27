@@ -1,0 +1,232 @@
+// Tiny DOM helpers: h(), icons, sheets, theme, placeholders. No dependencies.
+
+// h('a', {class:'row', href:'#/x', onclick: fn}, child, 'text', [more]) -> Element
+export function h(tag, props, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(props || {})) {
+    if (v == null || v === false) continue;
+    if (k === 'class') el.className = v;
+    else if (k === 'style') el.style.cssText = v;
+    else if (k === 'dataset') Object.assign(el.dataset, v);
+    else if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2), v);
+    else el.setAttribute(k, v === true ? '' : v);
+  }
+  for (const c of kids.flat(Infinity)) {
+    if (c == null || c === false) continue;
+    el.append(c.nodeType ? c : String(c));
+  }
+  return el;
+}
+
+// Parses trusted, app-authored markup (icons only) into an element.
+function fromMarkup(markup) {
+  const t = document.createElement('template');
+  t.innerHTML = markup.trim();
+  return t.content.firstElementChild;
+}
+
+const STROKE = 'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"';
+
+// 24x24 stroke icons. Area ids double as icon names so Learn can reuse them.
+const ICONS = {
+  home: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l9 8h-3v9h-4v-6h-4v6H6v-9H3z"/></svg>',
+  learn: `<svg viewBox="0 0 24 24" ${STROKE}><path d="M4 5a2 2 0 012-2h13v16H6a2 2 0 00-2 2z"/><path d="M4 21V5"/></svg>`,
+  practice: `<svg viewBox="0 0 24 24" ${STROKE}><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></svg>`,
+  cards: `<svg viewBox="0 0 24 24" ${STROKE}><rect x="3" y="6" width="14" height="14" rx="3"/><path d="M7 3h11a3 3 0 013 3v11"/></svg>`,
+  settings: `<svg viewBox="0 0 24 24" ${STROKE}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>`,
+  exam: `<svg viewBox="0 0 24 24" ${STROKE}><rect x="5" y="3" width="14" height="18" rx="2.5"/><path d="M9 3.5V5h6V3.5M9 11l2 2 4-4M9 17h6"/></svg>`,
+  video: `<svg viewBox="0 0 24 24" ${STROKE}><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M10 9.5v5l4.5-2.5z" fill="currentColor"/></svg>`,
+  lesson: `<svg viewBox="0 0 24 24" ${STROKE}><path d="M12 6c-2-1.5-5-2-8-1.5v14c3-.5 6 0 8 1.5 2-1.5 5-2 8-1.5v-14c-3-.5-6 0-8 1.5zM12 6v14"/></svg>`,
+  star: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3.2l2.6 5.5 6 .8-4.4 4.1 1.1 5.9L12 16.6l-5.3 2.9 1.1-5.9-4.4-4.1 6-.8z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>',
+  search: `<svg viewBox="0 0 24 24" ${STROKE}><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>`,
+  alert: `<svg viewBox="0 0 24 24" ${STROKE}><path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17.2v.1"/></svg>`,
+  play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13a1 1 0 001.5.86l10.4-6.5a1 1 0 000-1.72L9.5 4.64A1 1 0 008 5.5z"/></svg>',
+  foryou: `<svg viewBox="0 0 24 24" ${STROKE}><path d="M10 3.5l1.6 4.6a3 3 0 001.8 1.8L18 11.5l-4.6 1.6a3 3 0 00-1.8 1.8L10 19.5l-1.6-4.6a3 3 0 00-1.8-1.8L2 11.5l4.6-1.6a3 3 0 001.8-1.8z"/><path d="M18.5 2.5v4M16.5 4.5h4M19 16.5v3M17.5 18h3"/></svg>`,
+  flame: `<svg viewBox="0 0 24 24" ${STROKE}><path d="M12 21c-3.9 0-7-2.8-7-6.6 0-2.7 1.6-4.6 3.2-6.3.4 1.7 1.4 2.9 2.6 3.4C10.4 8 11.6 5 14.3 3c.2 3 1.7 4.6 3 6.2 1.1 1.4 1.7 3 1.7 5.2C19 18.2 15.9 21 12 21z"/><path d="M12 21c-1.7 0-3-1.3-3-3 0-1.9 1.6-2.8 2.4-4.4.9 1.2 3.6 2.2 3.6 4.4 0 1.7-1.3 3-3 3z"/></svg>`,
+  trophy: `<svg viewBox="0 0 24 24" ${STROKE}><path d="M7 4h10v5a5 5 0 01-10 0z"/><path d="M7 6H4v1.5A3.5 3.5 0 007.5 11M17 6h3v1.5a3.5 3.5 0 01-3.5 3.5M12 14v4M8.5 20.5h7M9.5 18h5"/></svg>`,
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 12.5l4.2 4.2L18.5 7.5"/></svg>',
+  clock: `<svg viewBox="0 0 24 24" ${STROKE}><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>`,
+  spark: `<svg viewBox="0 0 24 24" ${STROKE}><path d="M4 18l5-6 4 3 7-9"/><circle cx="20" cy="6" r="1.2" fill="currentColor"/></svg>`,
+  back: '<svg viewBox="0 0 10 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2L2 8l6 6"/></svg>',
+  chevron: '<svg viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5L6.5 7l-5 5.5"/></svg>',
+  close: '<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M2 2l10 10M12 2L2 12"/></svg>',
+  // Due Date Dashboard
+  today: `<svg viewBox="0 0 24 24" ${STROKE}><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/><circle cx="12" cy="15" r="1.6" fill="currentColor"/></svg>`,
+  week: `<svg viewBox="0 0 24 24" ${STROKE}><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4M7.5 14h2M11 14h2M14.5 14h2M7.5 17.5h2M11 17.5h2"/></svg>`,
+  refresh: `<svg viewBox="0 0 24 24" ${STROKE}><path d="M20 11.5A8 8 0 006.3 6.3L4 8.5M4 4v4.5h4.5"/><path d="M4 12.5a8 8 0 0013.7 5.2L20 15.5M20 20v-4.5h-4.5"/></svg>`,
+  link: `<svg viewBox="0 0 24 24" ${STROKE}><path d="M10 14a4.5 4.5 0 006.4 0l3-3a4.5 4.5 0 00-6.4-6.4l-1.2 1.2"/><path d="M14 10a4.5 4.5 0 00-6.4 0l-3 3a4.5 4.5 0 006.4 6.4l1.2-1.2"/></svg>`,
+  party: `<svg viewBox="0 0 24 24" ${STROKE}><path d="M4 20l4.5-12 7.5 7.5z"/><path d="M14 4.5c.5 1 .3 2-.5 2.8M19.5 10c-1-.5-2-.3-2.8.5M17 3.5l.5 1.5M20.5 7l-1.5.5"/></svg>`,
+  info: `<svg viewBox="0 0 24 24" ${STROKE}><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.6v.1"/></svg>`,
+  classroom: `<svg viewBox="0 0 24 24" ${STROKE}><rect x="3" y="4" width="18" height="13" rx="2.5"/><path d="M8 21h8M12 17v4"/><circle cx="12" cy="9.5" r="2"/><path d="M8.5 14.5c.6-1.6 2-2.5 3.5-2.5s2.9.9 3.5 2.5"/></svg>`,
+};
+
+// A boxed section: header row (title left, small muted meta right) inside the box, then the content.
+// title/meta may be strings or nodes; opts: {class, label (aria-label when there's no title), icon}.
+export function box(title, meta, kids, opts) {
+  opts = opts || {};
+  const head = title || meta ? h('div', { class: 'box-h' },
+    h(opts.tag || 'h2', { class: 'box-t' }, opts.icon ? icon(opts.icon) : null, title || ''),
+    meta != null && meta !== '' ? h('span', { class: 'box-m' }, meta) : null) : null;
+  return h('section', { class: `box${opts.class ? ' ' + opts.class : ''}`, 'aria-label': !title ? opts.label : null }, head, kids);
+}
+
+export function icon(name) {
+  const svg = fromMarkup(ICONS[name] || ICONS.today);
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('focusable', 'false');
+  return svg;
+}
+
+// Brand mark: the app icon (icons/icon.svg), rounded like an app icon.
+export function brandMark() {
+  const img = document.createElement('img');
+  img.src = 'icons/icon.svg';
+  img.alt = '';
+  img.setAttribute('aria-hidden', 'true');
+  img.style.display = 'block';
+  return img;
+}
+
+export const reducedMotion = () =>
+  typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// theme: 'auto' | 'light' | 'dark'. 'auto' follows prefers-color-scheme via CSS.
+export function applyTheme(theme) {
+  const root = document.documentElement;
+  if (theme === 'light' || theme === 'dark') root.dataset.theme = theme;
+  else delete root.dataset.theme;
+  const forced = theme === 'light' ? '#FAF7F2' : theme === 'dark' ? '#000000' : null;
+  document.querySelectorAll('meta[name="theme-color"]').forEach(m => {
+    m.setAttribute('content', forced || (m.media.includes('light') ? '#FAF7F2' : '#000000'));
+  });
+}
+
+// Light "haptic-ish" feedback where the platform supports it.
+export function tick(ms = 8) {
+  try { if (navigator.vibrate) navigator.vibrate(ms); } catch (e) { /* unsupported */ }
+}
+
+// Placeholder view for screens that later tasks build out.
+// title: string | (params, ctx) => string; line: same.
+export function placeholder(title, line, iconName = 'lesson') {
+  return function render(el, params = {}, ctx) {
+    const t = typeof title === 'function' ? title(params, ctx) : title;
+    const l = typeof line === 'function' ? line(params, ctx) : line;
+    el.append(
+      h('h1', { class: 'lt' }, t),
+      h('div', { class: 'empty' }, h('div', { class: 'ico' }, icon(iconName)), h('p', null, l)),
+    );
+  };
+}
+
+/* ---------- Sheets ---------- */
+
+const desktopMQ = () => typeof matchMedia === 'function' && matchMedia('(min-width: 768px)').matches;
+const openSheets = [];
+const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+
+// Opens contentEl in a sheet (phone: slides up; computer: centered panel).
+// Closes on ✕, backdrop tap, Escape, or swiping down >120px.
+// Returns close(opts). close({silent:true}) skips onClose (used by the router).
+export function openSheet(contentEl, { onClose, label = 'Details' } = {}) {
+  const prevFocus = document.activeElement;
+  const body = h('div', { class: 'sheet-body' }, contentEl);
+  const closeBtn = h('button', { class: 'sheet-close', type: 'button', 'aria-label': 'Close' }, icon('close'));
+  const grab = h('div', { class: 'sheet-grab', 'aria-hidden': 'true' });
+  const sheet = h('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': label, tabindex: '-1' }, grab, closeBtn, body);
+  const backdrop = h('div', { class: 'sheet-backdrop' });
+  const layer = h('div', { class: 'sheet-layer' }, backdrop, sheet);
+
+  let closed = false;
+  const entry = { layer };
+  openSheets.push(entry);
+  document.body.append(layer);
+  document.documentElement.classList.add('sheet-open');
+  const app = document.querySelector('.app');
+  if (app) app.inert = true;
+
+  void sheet.offsetHeight; // commit the closed position so the open state transitions
+  layer.classList.add('open');
+  sheet.focus({ preventScroll: true });
+
+  function close({ silent = false } = {}) {
+    if (closed) return;
+    closed = true;
+    document.removeEventListener('keydown', onKey, true);
+    layer.classList.remove('open');
+    sheet.classList.remove('dragging');
+    sheet.style.transform = '';
+    backdrop.style.opacity = '';
+    const idx = openSheets.indexOf(entry);
+    if (idx >= 0) openSheets.splice(idx, 1);
+    if (!openSheets.length) {
+      document.documentElement.classList.remove('sheet-open');
+      if (app) app.inert = false;
+    }
+    let removed = false;
+    const remove = () => { if (!removed) { removed = true; layer.remove(); } };
+    sheet.addEventListener('transitionend', e => { if (e.target === sheet) remove(); });
+    setTimeout(remove, reducedMotion() ? 0 : 600);
+    if (prevFocus && prevFocus.isConnected && typeof prevFocus.focus === 'function') prevFocus.focus({ preventScroll: true });
+    if (!silent && onClose) onClose();
+  }
+
+  function onKey(e) {
+    if (openSheets[openSheets.length - 1] !== entry) return;
+    if (e.key === 'Escape') { e.preventDefault(); close(); return; }
+    if (e.key === 'Tab') { // keep focus inside the sheet
+      const f = [...sheet.querySelectorAll(FOCUSABLE)].filter(n => n.offsetParent !== null);
+      if (!f.length) { e.preventDefault(); return; }
+      const first = f[0], last = f[f.length - 1];
+      if (e.shiftKey && (document.activeElement === first || document.activeElement === sheet)) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+  }
+  document.addEventListener('keydown', onKey, true);
+  closeBtn.addEventListener('click', () => close());
+  backdrop.addEventListener('click', () => close());
+
+  // Swipe down to dismiss (phone layout). Starts only when the content is scrolled to the top.
+  let startY = 0, lastY = 0, lastT = 0, vel = 0, dy = 0, dragging = false, tracking = false;
+  const begin = y => { tracking = body.scrollTop <= 0; dragging = false; startY = lastY = y; lastT = performance.now(); vel = 0; dy = 0; };
+  const move = (y, e) => {
+    if (!tracking) return;
+    const now = performance.now();
+    if (!dragging) {
+      if (y - startY > 4 && body.scrollTop <= 0) { dragging = true; startY = y; sheet.classList.add('dragging'); }
+      else if (y < startY - 4 || body.scrollTop > 0) { tracking = false; return; } // user is scrolling content
+      else return;
+    }
+    if (e && e.cancelable) e.preventDefault();
+    dy = Math.max(0, y - startY);
+    vel = (y - lastY) / Math.max(1, now - lastT);
+    lastY = y; lastT = now;
+    sheet.style.transform = `translateY(${dy}px)`;
+    backdrop.style.opacity = String(Math.max(0, 1 - dy / (sheet.offsetHeight || 1)));
+  };
+  const end = () => {
+    if (!tracking) return;
+    tracking = false;
+    if (!dragging) return;
+    dragging = false;
+    sheet.classList.remove('dragging');
+    if (dy > 120 || (vel > 0.6 && dy > 40)) { close(); return; }
+    sheet.style.transform = '';
+    backdrop.style.opacity = '';
+  };
+  sheet.addEventListener('touchstart', e => { if (!desktopMQ() && e.touches.length === 1) begin(e.touches[0].clientY); }, { passive: true });
+  sheet.addEventListener('touchmove', e => move(e.touches[0].clientY, e), { passive: false });
+  sheet.addEventListener('touchend', end);
+  sheet.addEventListener('touchcancel', end);
+  // Mouse/pen drag on the grabber, so the gesture also works with a pointer.
+  grab.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'touch' || desktopMQ()) return;
+    grab.setPointerCapture(e.pointerId);
+    begin(e.clientY);
+  });
+  grab.addEventListener('pointermove', e => { if (e.pointerType !== 'touch') move(e.clientY, e); });
+  grab.addEventListener('pointerup', e => { if (e.pointerType !== 'touch') end(); });
+  grab.addEventListener('pointercancel', e => { if (e.pointerType !== 'touch') end(); });
+
+  return close;
+}
