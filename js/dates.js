@@ -41,18 +41,29 @@ export function ago(iso, now = Date.now()) {
 export const isDone = (a, doneMap = {}) =>
   doneMap[a.id] != null ? !!doneMap[a.id] : a.state === 'TURNED_IN' || a.state === 'RETURNED';
 
-// Splits assignments into what the Today screen needs.
-// overdue: due before today and not done (newest first). today: due today. soon: next `ahead` days.
-export function plan(list, doneMap = {}, today = isoDay(), ahead = 3) {
-  const overdue = [], todayList = [], soon = [];
-  for (const a of list) {
-    const n = daysBetween(today, a.due);
-    if (n < 0) { if (!isDone(a, doneMap)) overdue.push(a); }
-    else if (n === 0) todayList.push(a);
-    else if (n <= ahead) soon.push(a);
-  }
-  overdue.sort((x, y) => (x.dueAt < y.dueAt ? 1 : -1));
-  return { overdue, today: todayList, soon };
+// Work that doesn't need to be turned in: optional, "don't upload", not collected.
+const NO_TURN_IN = /\b(optional|optionnel(?:le)?|facultati(?:f|ve|vo)|opcional|extra practice|no submission|not collected|not graded|(?:don'?t|do not|no need to) (?:upload|submit|turn (?:it )?in))\b/i;
+export const needsTurnIn = a => !NO_TURN_IN.test(`${a.title || ''}`);
+
+// The next school day after `day`: Friday and Saturday skip to Monday.
+export function nextSchoolDay(day) {
+  const wd = parseDay(day).getDay();
+  return addDays(day, wd === 5 ? 3 : wd === 6 ? 2 : 1);
+}
+
+// What the Today screen needs. today: due today. tomorrow: due after today up to the next school day
+// (do it tonight; on Fridays that's the whole weekend through Monday).
+// laterWeek: due after that, through Sunday of this week, not done yet.
+export function plan(list, doneMap = {}, today = isoDay()) {
+  const next = nextSchoolDay(today);
+  const end = addDays(weekStart(today), 6);
+  const work = list.filter(needsTurnIn);
+  return {
+    next,
+    today: work.filter(a => a.due === today),
+    tomorrow: work.filter(a => a.due > today && a.due <= next),
+    laterWeek: work.filter(a => a.due > next && a.due <= end && !isDone(a, doneMap)),
+  };
 }
 
 // Monday of the week containing `day`.
@@ -60,8 +71,9 @@ export function weekStart(day) { const d = parseDay(day); return addDays(day, -(
 
 // [{day, items}] for the 7 days starting at `start`.
 export function weekDays(list, start) {
+  const work = list.filter(needsTurnIn);
   return Array.from({ length: 7 }, (_, i) => {
     const day = addDays(start, i);
-    return { day, items: list.filter(a => a.due === day) };
+    return { day, items: work.filter(a => a.due === day) };
   });
 }

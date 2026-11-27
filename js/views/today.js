@@ -1,6 +1,6 @@
-// Today (#/today): progress ring for today, anything missing, today's list, and the next few days.
+// Today (#/today): quick glance at what's due today and what to do tonight (due the next school day).
 import { h, icon, box } from '../ui.js';
-import { isoDay, longDate, dayLabel, plan, ago, isDone, weekStart, addDays, daysBetween } from '../dates.js';
+import { isoDay, longDate, dayLabel, plan, ago, isDone } from '../dates.js';
 import { assignmentRow } from '../rows.js';
 import { ring, confetti } from '../fx.js';
 
@@ -14,11 +14,11 @@ export function render(el, params, ctx) {
   const today = isoDay();
   const list = ctx.state.cache.assignments;
   const connected = !!ctx.state.feed.url;
-  const p = plan(list, ctx.state.done, today, 3);
+  const p = plan(list, ctx.state.done, today);
   const doneToday = p.today.filter(a => isDone(a, ctx.state.done)).length;
   const left = p.today.length - doneToday;
-  const ws = weekStart(today);
-  const weekLeft = list.filter(a => daysBetween(ws, a.due) < 7 && a.due >= today && !isDone(a, ctx.state.done)).length;
+  const tonightLeft = p.tomorrow.filter(a => !isDone(a, ctx.state.done)).length;
+  const nextName = dayLabel(p.next, today); // 'Tomorrow' or 'Monday'
 
   const updated = ctx.state.cache.updated;
   const stale = !updated || Date.now() - Date.parse(updated) > 6 * 36e5;
@@ -29,10 +29,11 @@ export function render(el, params, ctx) {
     : `Synced ${ago(updated)}${stale ? ' · tap Sync for the latest' : ''}`;
 
   // The next thing that isn't done, today first.
-  const next = [...p.today, ...p.soon].find(a => !isDone(a, ctx.state.done));
+  const next = [...p.today, ...p.tomorrow].find(a => !isDone(a, ctx.state.done));
   const mood = !connected ? null
     : !updated ? 'Tap Sync to bring in your Classroom assignments.'
-    : !p.today.length ? 'Nothing due today. Get ahead or take a break.'
+    : !p.today.length && !tonightLeft ? `Nothing due today or ${nextName === 'Tomorrow' ? 'tomorrow' : `by ${nextName}`}. Enjoy it.`
+    : !p.today.length ? `Nothing due today. ${tonightLeft} to do for ${nextName === 'Tomorrow' ? 'tomorrow' : nextName}.`
     : !left ? 'Everything due today is done. Nice work.'
     : left === 1 ? 'One more thing and today is done.'
     : `${left} things left today. You’ve got this.`;
@@ -64,15 +65,6 @@ export function render(el, params, ctx) {
     return;
   }
 
-  el.append(h('div', { class: 'hm-tiles' },
-    tile(left ? 'hot' : '', 'today', String(left), 'left today', '#/today'),
-    tile(weekLeft ? '' : 'good', 'week', String(weekLeft), 'left this week', '#/week')));
-
-  if (p.overdue.length) {
-    el.append(box('Missing', `${p.overdue.length}`, h('div', { class: 'group' },
-      p.overdue.map(a => assignmentRow(a, ctx, { showDay: true, onToggle: () => later(ctx) }))), { icon: 'alert', class: 'dd-missing' }));
-  }
-
   const onTodayToggle = (nowDone, from) => {
     const all = p.today.every(a => isDone(a, ctx.state.done));
     if (nowDone && all) confetti(from);
@@ -85,21 +77,24 @@ export function render(el, params, ctx) {
       : h('div', { class: 'plan-done' }, icon('party'), 'Nothing due today'),
     { icon: 'today' }));
 
-  const days = [1, 2, 3].map(n => addDays(today, n)).map(d => ({ d, items: p.soon.filter(a => a.due === d) })).filter(x => x.items.length);
-  el.append(box('Coming up', h('a', { href: '#/week' }, 'See week'),
-    days.length
-      ? days.map(({ d, items }) => [h('h3', { class: 'dd-day' }, dayLabel(d, today)), h('div', { class: 'group' }, items.map(a => assignmentRow(a, ctx)))])
-      : h('p', { class: 'box-note dd-none' }, 'Nothing due in the next 3 days.'),
-    { icon: 'clock' }));
+  // Homework for tonight: whatever is due the next school day (Monday on Fridays).
+  const weekend = nextName !== 'Tomorrow';
+  el.append(box(weekend ? `Due by ${nextName}` : 'Due tomorrow',
+    p.tomorrow.length ? (weekend ? 'Do this weekend' : 'Do tonight') : '',
+    p.tomorrow.length
+      ? h('div', { class: 'group' }, p.tomorrow.map(a => assignmentRow(a, ctx, { showDay: weekend, onToggle: () => later(ctx) })))
+      : h('p', { class: 'box-note dd-none' }, weekend ? `Nothing due by ${nextName}.` : 'Nothing due tomorrow.'),
+    { icon: 'clock', class: p.tomorrow.some(a => !isDone(a, ctx.state.done)) ? 'dd-tonight' : '' }));
+
+  // The rest of the week, as one tappable line.
+  const n = p.laterWeek.length;
+  el.append(h('a', { class: 'box dd-later', href: '#/week' },
+    h('div', { class: 'tile-ico' }, icon('week')),
+    h('div', { class: 't' }, n ? `${n} more due later this week` : 'Nothing else due this week',
+      h('small', null, n ? [...new Set(p.laterWeek.map(a => dayLabel(a.due, today)))].join(' · ') : 'See your week')),
+    h('span', { class: 'chev' }, icon('chevron'))));
 }
 
 // Re-render after the check mark has had time to draw.
 let timer = 0;
 function later(ctx, ms = 450) { clearTimeout(timer); timer = setTimeout(() => ctx.rerender(), ms); }
-
-function tile(cls, ico, value, label, href) {
-  return h('a', { class: `box tile ${cls}`, href },
-    h('div', { class: 'tile-ico' }, icon(ico)),
-    h('div', { class: 'tile-v num' }, value),
-    h('div', { class: 'tile-l' }, label));
-}
