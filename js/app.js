@@ -1,7 +1,7 @@
-// Boot, hash router, nav, theme, Classroom refresh.
+// Boot, hash router, nav, theme, Classroom sync.
 // Adding a screen = creating js/views/<name>.js that exports render(el, params, ctx).
 import { loadState, saveState } from './store.js';
-import { refresh as pullFeed, readConnectParams } from './feed.js';
+import { readConnectParams, importPayload, syncHref, appBase } from './feed.js';
 import { h, icon, brandMark, applyTheme, placeholder } from './ui.js';
 import { initOffline, routeChanged } from './offline.js';
 
@@ -10,6 +10,7 @@ export const ROUTES = {
   week:     { title: 'Week', tab: 'week' },
   settings: { title: 'Settings', tab: 'settings' },
   connect:  { title: 'Connect', tab: 'settings' }, // one-time setup link, see feed.js
+  import:   { title: 'Sync', tab: 'today' },       // where the sync page sends you back, see feed.js
 };
 const NAV = [['today', 'Today'], ['week', 'Week'], ['settings', 'Settings']];
 
@@ -27,22 +28,15 @@ export function parseHash(hash) {
 const demo = new URLSearchParams(location.search).has('demo');
 const ctx = {
   state: loadState(),
-  refreshing: false,
   lastError: '',
   save() { return demo ? true : saveState(ctx.state); },
   applyTheme,
   rerender() { return route({ keepScroll: true }); },
-  // Pulls from Classroom. Re-renders when done unless quiet. Returns {ok, error}.
-  async refresh(fresh = false, { quiet = false } = {}) {
-    if (demo || ctx.refreshing) return { ok: true };
-    ctx.refreshing = true;
-    if (!quiet) ctx.rerender();
-    const r = await pullFeed(ctx.state, { fresh });
-    ctx.refreshing = false;
-    ctx.lastError = r.ok || r.error === 'not-connected' ? '' : r.error;
-    if (r.ok) ctx.save();
-    if (!quiet || r.ok) ctx.rerender();
-    return r;
+  // Goes to your sync page, which reads Classroom and sends you back to #/import.
+  sync() {
+    if (demo) { toast('Sync is off in the demo'); return; }
+    if (!ctx.state.feed.url) { location.hash = '#/settings'; return; }
+    location.href = syncHref(ctx.state.feed.url, appBase());
   },
 };
 
@@ -108,6 +102,7 @@ async function route({ keepScroll = false } = {}) {
   const r = parseHash(location.hash);
   if (!r.valid) history.replaceState(null, '', '#/today');
   if (r.name === 'connect') { handleConnect(r.params); return; }
+  if (r.name === 'import') { handleImport(r.params); return; }
   const token = ++navToken;
   const mod = await loadView(r.name);
   if (token !== navToken) return;
@@ -136,12 +131,23 @@ async function route({ keepScroll = false } = {}) {
   routeChanged();
 }
 
-// #/connect?u=...&k=... saves the Classroom link, then goes to Today and pulls.
+// #/connect?u=... saves your sync page link, then goes to Today.
 function handleConnect(params) {
   const got = readConnectParams(params);
   if (got) { ctx.state.feed = got; ctx.save(); }
   history.replaceState(null, '', got ? '#/today' : '#/settings');
-  route().then(() => { if (got) ctx.refresh(true); });
+  route().then(() => { if (got) toast('Connected. Tap Sync to bring in your assignments.', 'practice', 4200); });
+}
+
+// #/import?d=... (from the sync page) saves the list; #/import?err=... shows what went wrong.
+function handleImport(params) {
+  let r;
+  if (params.err) r = { ok: false, error: `Classroom said: ${params.err}` };
+  else r = importPayload(ctx.state, params.d);
+  ctx.lastError = r.ok ? '' : r.error;
+  if (r.ok) ctx.save();
+  history.replaceState(null, '', '#/today');
+  route().then(() => { if (r.ok) toast(`Synced ${r.count} assignment${r.count === 1 ? '' : 's'}`); });
 }
 
 /* ---------- Boot ---------- */
@@ -155,15 +161,6 @@ async function boot() {
   if (!location.hash || location.hash === '#' || location.hash === '#/') history.replaceState(null, '', '#/today');
   window.addEventListener('hashchange', () => route());
   await route();
-  // Pull fresh assignments on open, when the app comes back to the front (at most every 5 min), and when back online.
-  const STALE = 5 * 60 * 1000;
-  const maybeRefresh = () => {
-    const u = Date.parse(ctx.state.cache.updated || 0) || 0;
-    if (Date.now() - u > STALE) ctx.refresh();
-  };
-  maybeRefresh();
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') maybeRefresh(); });
-  window.addEventListener('online', maybeRefresh);
   // At midnight "today" changes: re-render when the app comes back to the front on a new day.
   let day = new Date().toDateString();
   document.addEventListener('visibilitychange', () => {
@@ -173,10 +170,11 @@ async function boot() {
 boot();
 
 /* ---------- Offline support ---------- */
-function toast(text) {
-  const t = h('div', { class: 'toast', role: 'status' }, icon('practice'), h('span', null, text));
+function toast(text, ico = 'practice', ms = 3200) {
+  document.querySelectorAll('.toast').forEach(old => old.remove());
+  const t = h('div', { class: 'toast', role: 'status' }, icon(ico), h('span', null, text));
   document.body.append(t);
   requestAnimationFrame(() => t.classList.add('show'));
-  setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 400); }, 3200);
+  setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 400); }, ms);
 }
 initOffline({ safe: () => parseHash(location.hash).name !== 'settings', onFirstReady: () => toast('Ready to use offline') });

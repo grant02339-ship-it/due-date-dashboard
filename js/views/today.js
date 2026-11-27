@@ -13,22 +13,25 @@ function greeting(name) {
 export function render(el, params, ctx) {
   const today = isoDay();
   const list = ctx.state.cache.assignments;
-  const connected = !!(ctx.state.feed.url && ctx.state.feed.key);
+  const connected = !!ctx.state.feed.url;
   const p = plan(list, ctx.state.done, today, 3);
   const doneToday = p.today.filter(a => isDone(a, ctx.state.done)).length;
   const left = p.today.length - doneToday;
   const ws = weekStart(today);
   const weekLeft = list.filter(a => daysBetween(ws, a.due) < 7 && a.due >= today && !isDone(a, ctx.state.done)).length;
 
-  const refreshBtn = h('button', { class: `icon-btn dd-refresh${ctx.refreshing ? ' spin' : ''}`, type: 'button', 'aria-label': 'Refresh from Classroom', onclick: () => ctx.refresh(true) }, icon('refresh'));
+  const updated = ctx.state.cache.updated;
+  const stale = !updated || Date.now() - Date.parse(updated) > 6 * 36e5;
+  const syncBtn = h('button', { class: `dd-sync${stale ? ' hot' : ''}`, type: 'button', onclick: () => ctx.sync() }, icon('refresh'), h('span', null, 'Sync'));
   const status = !connected ? 'Not connected to Classroom'
     : ctx.lastError ? ctx.lastError
-    : ctx.refreshing ? 'Checking Classroom…'
-    : `Updated ${ago(ctx.state.cache.updated)}`;
+    : !updated ? 'Not synced yet. Tap Sync.'
+    : `Synced ${ago(updated)}${stale ? ' · tap Sync for the latest' : ''}`;
 
   // The next thing that isn't done, today first.
   const next = [...p.today, ...p.soon].find(a => !isDone(a, ctx.state.done));
   const mood = !connected ? null
+    : !updated ? 'Tap Sync to bring in your Classroom assignments.'
     : !p.today.length ? 'Nothing due today. Get ahead or take a break.'
     : !left ? 'Everything due today is done. Nice work.'
     : left === 1 ? 'One more thing and today is done.'
@@ -41,8 +44,9 @@ export function render(el, params, ctx) {
         h('div', { class: 'hm-hi' },
           h('div', { class: 'dd-kicker' }, longDate(today)),
           h('div', { class: 'lt hm-title' }, greeting(ctx.state.settings.name))),
-        connected ? refreshBtn : null),
-      connected ? h('div', { class: 'hm-ready dd-ready' },
+        connected ? syncBtn : null),
+      connected && !updated ? h('p', { class: 'dd-mood dd-first' }, mood) : null,
+      connected && updated ? h('div', { class: 'hm-ready dd-ready' },
         ring(doneToday, p.today.length),
         h('div', { class: 'hm-rmeta' },
           h('div', { class: 'dd-mood' }, mood),

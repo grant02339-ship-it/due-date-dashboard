@@ -5,7 +5,7 @@ export function defaultState() {
   return {
     v: 1,
     settings: { theme: 'auto', name: '' },
-    feed: { url: '', key: '' },               // your Apps Script web app + private key
+    feed: { url: '' },                         // your Apps Script sync page
     cache: { updated: null, assignments: [] }, // last list pulled from Classroom
     done: {},                                  // id -> true/false: your own check-offs override Classroom
   };
